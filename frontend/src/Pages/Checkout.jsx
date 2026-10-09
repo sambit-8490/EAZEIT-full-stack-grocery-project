@@ -6,6 +6,12 @@ import { showToast } from '../Components/Toast';
 import { apiPlaceOrder, createRazorpayOrder, verifyRazorpayPayment, apiGetAddresses, apiAddAddress } from '../Utils/api';
 import { resolveProductImage } from '../Utils/image';
 import { FREE_DELIVERY_MIN } from '../Utils/storage';
+
+// Demo mode: skip Razorpay and treat UPI / Card payment as successful.
+// Set REACT_APP_DEMO_PAYMENT=false to use real Razorpay again.
+const DEMO_PAYMENT = process.env.REACT_APP_DEMO_PAYMENT !== 'false';
+const UPI_REGEX = /^[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}$/;
+
 /** Dynamically loads the Razorpay checkout script */
 function loadRazorpayScript() {
   return new Promise((resolve) => {
@@ -86,7 +92,7 @@ const Checkout = () => {
     [addresses, selectedAddressId]
   );
 
-  /* â”€â”€ Add address via API â”€â”€ */
+  /* -- Add address via API -- */
   const onAddAddress = async (e) => {
     e.preventDefault();
     if (!user) return;
@@ -105,15 +111,15 @@ const Checkout = () => {
       setSelectedAddressId(added.id);
       setNewAddress(initialAddress);
       setAddingAddress(false);
-      showToast('Address saved successfully! âœ“');
+      showToast('Address saved successfully! ✓');
     } catch (err) {
       showToast(err.message || 'Failed to save address.', true);
     }
   };
 
-  /* â”€â”€ Validate payment â”€â”€ */
+  /* -- Validate payment -- */
   const validatePayment = () => {
-    if (paymentMethod === 'UPI')  return upiId.trim().length > 0;
+    if (paymentMethod === 'UPI')  return UPI_REGEX.test(upiId.trim());
     if (paymentMethod === 'CARD') {
       return (
         card.name.trim().length > 1 &&
@@ -125,7 +131,7 @@ const Checkout = () => {
     return true; // COD
   };
 
-  /* â”€â”€ Shared: save & navigate after successful payment â”€â”€ */
+  /* -- Shared: save & navigate after successful payment -- */
   const finaliseOrder = async (orderData, paymentId = null) => {
     try {
       const saved = await apiPlaceOrder({ ...orderData, razorpayPaymentId: paymentId });
@@ -145,7 +151,7 @@ const Checkout = () => {
     }
   };
 
-  /* â”€â”€ Build shared order payload â”€â”€ */
+  /* -- Build shared order payload -- */
   const buildOrderData = () => ({
     userEmail: user.email,
     items: cartItems.map(item => ({
@@ -174,7 +180,7 @@ const Checkout = () => {
     total: cartTotal,
   });
 
-  /* â”€â”€ Place order â”€â”€ */
+  /* -- Place order -- */
   const placeOrder = async () => {
     if (!selectedAddress) { showToast('Please select a delivery address.', true); return; }
     if (!validatePayment()) { showToast('Please complete valid payment details.', true); return; }
@@ -184,6 +190,15 @@ const Checkout = () => {
     // COD: skip Razorpay, place directly
     if (paymentMethod === 'COD') {
       await finaliseOrder(buildOrderData());
+      return;
+    }
+
+    // Demo payment: no Razorpay, auto-success
+    if (DEMO_PAYMENT) {
+      showToast('Processing payment…');
+      await new Promise((r) => setTimeout(r, 1200));
+      showToast('Payment successful ✓');
+      await finaliseOrder(buildOrderData(), `DEMO_${Date.now()}`);
       return;
     }
 
@@ -222,7 +237,7 @@ const Checkout = () => {
       amount:      rzpOrder.amount,
       currency:    rzpOrder.currency,
       name:        'EAZEIT',
-      description: 'Annachi Kadai â€” Quick Grocery',
+      description: 'Annachi Kadai — Quick Grocery',
       order_id:    rzpOrder.orderId,
       prefill,
       theme: { color: '#2dd4bf' },
@@ -233,7 +248,7 @@ const Checkout = () => {
         },
       },
       handler: async (response) => {
-        // Payment successful â€” verify signature before finalising
+        // Payment successful — verify signature before finalising
         try {
           showToast('Verifying payment...');
           const verification = await verifyRazorpayPayment({
@@ -242,7 +257,7 @@ const Checkout = () => {
             razorpay_signature: response.razorpay_signature,
           });
           if (verification && verification.verified) {
-            showToast('Payment verified! Placing your orderâ€¦');
+            showToast('Payment verified! Placing your order…');
             await finaliseOrder(buildOrderData(), response.razorpay_payment_id);
           } else {
             showToast('Payment verification failed.', true);
@@ -261,10 +276,10 @@ const Checkout = () => {
       setPlacing(false);
     });
     rzp.open();
-    // Don't setPlacing(false) here â€” handler or ondismiss will control it
+    // Don't setPlacing(false) here — handler or ondismiss will control it
   };
 
-  /* â”€â”€ Step navigation â”€â”€ */
+  /* -- Step navigation -- */
   const canProceed = () => {
     if (step === 1) return !!selectedAddress;
     if (step === 2) return cartItems.length > 0;
@@ -281,17 +296,17 @@ const Checkout = () => {
     setStep((s) => Math.min(4, s + 1));
   };
 
-  /* â”€â”€ Input helper â”€â”€ */
+  /* -- Input helper -- */
   const inputCls = 'w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-400 transition-colors';
 
   return (
     <>
-      {/* â”€â”€ Page Header â”€â”€ */}
+      {/* -- Page Header -- */}
       <div className="bg-slate-800 border-b border-slate-700 py-8 px-4 md:px-6">
         <div className="max-w-7xl mx-auto">
           <h1 className="font-serif font-extrabold text-3xl text-white mb-4">Checkout</h1>
 
-          {/* â”€â”€ Step Indicator â”€â”€ */}
+          {/* -- Step Indicator -- */}
           <div className="flex items-center gap-0">
             {STEPS.map((s, i) => (
               <React.Fragment key={s.id}>
@@ -308,7 +323,7 @@ const Checkout = () => {
                   <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                     step > s.id ? 'bg-teal-400 text-slate-900' : step === s.id ? 'bg-slate-900 text-teal-400' : 'bg-slate-700 text-slate-500'
                   }`}>
-                    {step > s.id ? 'âœ“' : s.id}
+                    {step > s.id ? '✓' : s.id}
                   </span>
                   <span className="hidden sm:inline">{s.label}</span>
                 </button>
@@ -321,14 +336,14 @@ const Checkout = () => {
         </div>
       </div>
 
-      {/* â”€â”€ Main Content â”€â”€ */}
+      {/* -- Main Content -- */}
       <section className="py-8 px-4 md:px-6 bg-slate-900 min-h-screen">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6 items-start">
 
-          {/* â”€â”€ Left Panel â”€â”€ */}
+          {/* -- Left Panel -- */}
           <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 md:p-6">
 
-            {/* â”€â”€ STEP 1: ADDRESS â”€â”€ */}
+            {/* -- STEP 1: ADDRESS -- */}
             {step === 1 && (
               <div>
                 <h3 className="text-white font-bold text-lg mb-5 flex items-center gap-2">
@@ -407,11 +422,11 @@ const Checkout = () => {
               </div>
             )}
 
-            {/* â”€â”€ STEP 2: REVIEW â”€â”€ */}
+            {/* -- STEP 2: REVIEW -- */}
             {step === 2 && (
               <div>
                 <h3 className="text-white font-bold text-lg mb-5 flex items-center gap-2">
-                  <span>ðŸ“‹</span> Review Your Items
+                  <span>📋</span> Review Your Items
                 </h3>
                 <div className="space-y-3">
                   {cartItems.map((item) => (
@@ -447,7 +462,7 @@ const Checkout = () => {
               </div>
             )}
 
-            {/* —— STEP 3: PAYMENT —— */}
+            {/* -- STEP 3: PAYMENT -- */}
             {step === 3 && (
               <div>
                 <h3 className="text-white font-bold text-lg mb-5 flex items-center gap-2">
@@ -536,7 +551,7 @@ const Checkout = () => {
                       <input
                         value={card.cvv}
                         onChange={(e) => setCard((p) => ({ ...p, cvv: e.target.value.replace(/\D/g, '').slice(0, 3) }))}
-                        placeholder="â€¢â€¢â€¢"
+                        placeholder="•••"
                         maxLength={3}
                         type="password"
                         className={inputCls}
@@ -560,7 +575,7 @@ const Checkout = () => {
               </div>
             )}
 
-            {/* â”€â”€ STEP 4: CONFIRM â”€â”€ */}
+            {/* -- STEP 4: CONFIRM -- */}
             {step === 4 && (
               <div>
                 <h3 className="text-white font-bold text-lg mb-5 flex items-center gap-2">
@@ -630,7 +645,7 @@ const Checkout = () => {
               </div>
             )}
 
-            {/* â”€â”€ Step Navigation â”€â”€ */}
+            {/* -- Step Navigation -- */}
             <div className="mt-8 flex justify-between items-center border-t border-slate-700 pt-5">
               <button
                 onClick={() => setStep((s) => Math.max(1, s - 1))}
@@ -652,7 +667,7 @@ const Checkout = () => {
             </div>
           </div>
 
-          {/* —— Right: Order Summary (sticky) —— */}
+          {/* -- Right: Order Summary (sticky) -- */}
           <aside className="bg-slate-800 border border-slate-700 rounded-xl p-5 lg:sticky lg:top-6">
             <h3 className="text-white font-bold text-base mb-4">Order Summary</h3>
 

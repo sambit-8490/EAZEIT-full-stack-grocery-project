@@ -13,11 +13,11 @@ build/
 frontend/build/
 
 # env files (never commit real secrets)
-.env
-backend/.env
-frontend/.env
-frontend/.env.production
-env
+# .env
+# backend/.env
+# frontend/.env
+# frontend/.env.production
+# env
 .env.local
 .env.development.local
 .env.test.local
